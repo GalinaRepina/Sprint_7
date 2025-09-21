@@ -1,90 +1,56 @@
+# tests/test_courier_creation.py
 import pytest
 import requests
-import random
-import string
-
-def generate_random_string(length):
-    """Генерирует случайную строку указанной длины"""
-    letters = string.ascii_lowercase
-    return ''.join(random.choice(letters) for _ in range(length))
+import allure
+from urls import Endpoints
+from helpers.data_generator import generate_courier_data
+from helpers.courier_helper import create_courier, login_courier, delete_courier
 
 class TestCourierCreation:
-    BASE_URL = 'https://qa-scooter.praktikum-services.ru/api/v1/courier'
     
-    def generate_unique_courier_data(self):
-        """Генерирует уникальные данные для курьера"""
-        login = generate_random_string(10)
-        password = generate_random_string(10)
-        first_name = generate_random_string(10)
-        return login, password, first_name
-    
+    @allure.title("Тест успешного создания курьера")
     def test_create_courier_success(self):
         """Тест успешного создания курьера"""
-        login, password, first_name = self.generate_unique_courier_data()
+        courier_data = generate_courier_data()
         
-        payload = {
-            "login": login,
-            "password": password,
-            "firstName": first_name
-        }
-        
-        response = requests.post(self.BASE_URL, json=payload)
+        response = create_courier(courier_data)
         
         assert response.status_code == 201
         assert response.json()["ok"] == True
         
-        # Удаляем тестовые данные
-        login_payload = {"login": login, "password": password}
-        login_response = requests.post(f'{self.BASE_URL}/login', json=login_payload)
-        courier_id = login_response.json()["id"]
-        requests.delete(f'{self.BASE_URL}/{courier_id}')
+        # Пост-условие
+        courier_id = login_courier(courier_data["login"], courier_data["password"])
+        if courier_id:
+            delete_courier(courier_id)
     
+    @allure.title("Тест создания дубликата курьера")
     def test_create_duplicate_courier(self):
         """Тест создания дубликата курьера"""
-        login, password, first_name = self.generate_unique_courier_data()
-        
-        payload = {
-            "login": login,
-            "password": password,
-            "firstName": first_name
-        }
+        courier_data = generate_courier_data()
         
         # Первое создание
-        response1 = requests.post(self.BASE_URL, json=payload)
+        response1 = create_courier(courier_data)
         assert response1.status_code == 201
         
         # Попытка создания дубликата
-        response2 = requests.post(self.BASE_URL, json=payload)
+        response2 = create_courier(courier_data)
         
         assert response2.status_code == 409
         assert "уже используется" in response2.json()["message"]
         
-        # Очистка
-        login_payload = {"login": login, "password": password}
-        login_response = requests.post(f'{self.BASE_URL}/login', json=login_payload)
-        courier_id = login_response.json()["id"]
-        requests.delete(f'{self.BASE_URL}/{courier_id}')
-    
-    def test_create_courier_missing_login(self):
-        """Тест создания курьера без логина"""
-        payload = {
-            "password": "password123",
-            "firstName": "Ivan"
-        }
-        
-        response = requests.post(self.BASE_URL, json=payload)
-        
-        assert response.status_code == 400
-        assert "Недостаточно данных" in response.json()["message"]
-    
-    def test_create_courier_missing_password(self):
-        """Тест создания курьера без пароля"""
-        payload = {
-            "login": "testlogin",
-            "firstName": "Ivan"
-        }
-        
-        response = requests.post(self.BASE_URL, json=payload)
+        # Пост-условие
+        courier_id = login_courier(courier_data["login"], courier_data["password"])
+        if courier_id:
+            delete_courier(courier_id)
+
+    @pytest.mark.parametrize("payload,expected_message", [
+        ({"password": "password123", "firstName": "Ivan"}, "Недостаточно данных"),
+        ({"login": "testlogin", "firstName": "Ivan"}, "Недостаточно данных")
+    ])
+    @allure.title("Тест создания курьера с недостаточными данными")
+    def test_create_courier_missing_data(self, payload, expected_message):
+        """Тест создания курьера с недостаточными данными"""
+        response = requests.post(Endpoints.COURIER, json=payload)
         
         assert response.status_code == 400
-        assert "Недостаточно данных" in response.json()["message"]
+        assert expected_message in response.json()["message"]
