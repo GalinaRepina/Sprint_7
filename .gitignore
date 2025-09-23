@@ -22,7 +22,6 @@ wheels/
 MANIFEST
 
 # Allure
-allure-results/
 allure-report/
 
 # System
@@ -46,3 +45,4 @@ venv/
 env/
 EOF
 
+allure-results/
